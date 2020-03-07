@@ -32,8 +32,10 @@ android {
 
 repositories {
     mavenCentral()
+    google()
 }
 
 dependencies {
     implementation 'com.facebook.react:react-native:+'
+    implementation 'com.squareup.picasso:picasso:2.71828'
 }

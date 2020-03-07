@@ -8,22 +8,28 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
 import android.content.ContentUris;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.Manifest;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.CommonDataKinds;
 import android.provider.ContactsContract.CommonDataKinds.Organization;
 import android.provider.ContactsContract.CommonDataKinds.StructuredName;
 import android.provider.ContactsContract.CommonDataKinds.Note;
 import android.provider.ContactsContract.RawContacts;
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.util.Log;
 
 import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.Callback;
@@ -34,6 +40,8 @@ import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.WritableArray;
+import com.squareup.picasso.Picasso;
+import com.squareup.picasso.Target;
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
@@ -53,13 +61,20 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
 
     private static final int REQUEST_OPEN_CONTACT_FORM = 52941;
     private static final int REQUEST_OPEN_EXISTING_CONTACT = 52942;
+    private static final String TAG = ContactsManager.class.getSimpleName();
 
     private static Callback updateContactCallback;
     private static Callback requestCallback;
 
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Picasso picasso;
+    private final Context context;
+
     public ContactsManager(ReactApplicationContext reactContext) {
         super(reactContext);
         reactContext.addActivityEventListener(this);
+        context = reactContext.getApplicationContext();
+        picasso = Picasso.get();
     }
 
     /*
@@ -88,9 +103,9 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * @param callback user provided callback to run at completion
      */
     private void getAllContacts(final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
 
@@ -106,9 +121,9 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
 
     @ReactMethod
     public void getCount(final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
 
@@ -127,13 +142,13 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Uses raw URI when <code>rawUri</code> is <code>true</code>, makes assets copy otherwise.
      *
      * @param searchString String to match
-     * @param callback user provided callback to run at completion
+     * @param callback     user provided callback to run at completion
      */
     @ReactMethod
     public void getContactsMatchingString(final String searchString, final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
                 ContactsProvider contactsProvider = new ContactsProvider(cr);
@@ -151,13 +166,13 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Uses raw URI when <code>rawUri</code> is <code>true</code>, makes assets copy otherwise.
      *
      * @param phoneNumber phone number to match
-     * @param callback user provided callback to run at completion
+     * @param callback    user provided callback to run at completion
      */
     @ReactMethod
     public void getContactsByPhoneNumber(final String phoneNumber, final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
                 ContactsProvider contactsProvider = new ContactsProvider(cr);
@@ -175,13 +190,13 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Uses raw URI when <code>rawUri</code> is <code>true</code>, makes assets copy otherwise.
      *
      * @param emailAddress email address to match
-     * @param callback user provided callback to run at completion
+     * @param callback     user provided callback to run at completion
      */
     @ReactMethod
     public void getContactsByEmailAddress(final String emailAddress, final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
                 ContactsProvider contactsProvider = new ContactsProvider(cr);
@@ -198,13 +213,13 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Retrieves <code>thumbnailPath</code> for contact, or <code>null</code> if not available.
      *
      * @param contactId contact identifier, <code>recordID</code>
-     * @param callback callback
+     * @param callback  callback
      */
     @ReactMethod
     public void getPhotoForId(final String contactId, final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
                 ContactsProvider contactsProvider = new ContactsProvider(cr);
@@ -221,13 +236,13 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Retrieves <code>contact</code> for contact, or <code>null</code> if not available.
      *
      * @param contactId contact identifier, <code>recordID</code>
-     * @param callback callback
+     * @param callback  callback
      */
     @ReactMethod
     public void getContactById(final String contactId, final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
                 ContactsProvider contactsProvider = new ContactsProvider(cr);
@@ -242,9 +257,9 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
 
     @ReactMethod
     public void writePhotoToPath(final String contactId, final String file, final Callback callback) {
-        AsyncTask<Void,Void,Void> myAsyncTask = new AsyncTask<Void,Void,Void>() {
+        AsyncTask<Void, Void, Void> myAsyncTask = new AsyncTask<Void, Void, Void>() {
             @Override
-            protected Void doInBackground(final Void ... params) {
+            protected Void doInBackground(final Void... params) {
                 Context context = getReactApplicationContext();
                 ContentResolver cr = context.getContentResolver();
 
@@ -282,7 +297,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
         if (photo == null) {
             // Try to find the thumbnail from assets
             AssetManager assetManager = getReactApplicationContext().getAssets();
-            InputStream  inputStream = null;
+            InputStream inputStream = null;
             try {
                 inputStream = assetManager.open(thumbnailPath);
                 photo = BitmapFactory.decodeStream(inputStream);
@@ -299,20 +314,21 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Start open contact form
      */
     @ReactMethod
-    public void openContactForm(ReadableMap contact, Callback callback) {
+    public void openContactForm(ReadableMap _contact, Callback callback) {
 
-        String givenName = contact.hasKey("givenName") ? contact.getString("givenName") : null;
-        String middleName = contact.hasKey("middleName") ? contact.getString("middleName") : null;
-        String displayName = contact.hasKey("displayName") ? contact.getString("displayName") : null;
-        String familyName = contact.hasKey("familyName") ? contact.getString("familyName") : null;
-        String prefix = contact.hasKey("prefix") ? contact.getString("prefix") : null;
-        String suffix = contact.hasKey("suffix") ? contact.getString("suffix") : null;
-        String company = contact.hasKey("company") ? contact.getString("company") : null;
-        String jobTitle = contact.hasKey("jobTitle") ? contact.getString("jobTitle") : null;
-        String department = contact.hasKey("department") ? contact.getString("department") : null;
-        String thumbnailPath = contact.hasKey("thumbnailPath") ? contact.getString("thumbnailPath") : null;
+        ReadableMapWrapper contact = new ReadableMapWrapper(_contact);
+        String givenName = contact.getString("givenName", null);
+        String middleName = contact.getString("middleName", null);
+        String displayName = contact.getString("displayName", null);
+        String familyName = contact.getString("familyName", null);
+        String prefix = contact.getString("prefix", null);
+        String suffix = contact.getString("suffix", null);
+        String company = contact.getString("company", null);
+        String jobTitle = contact.getString("jobTitle", null);
+        String department = contact.getString("department", null);
+        String thumbnailPath = contact.getString("thumbnailPath", null);
 
-        ReadableArray phoneNumbers = contact.hasKey("phoneNumbers") ? contact.getArray("phoneNumbers") : null;
+        ReadableArray phoneNumbers = contact.getArray("phoneNumbers", null);
         int numOfPhones = 0;
         String[] phones = null;
         Integer[] phonesLabels = null;
@@ -327,7 +343,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray urlAddresses = contact.hasKey("urlAddresses") ? contact.getArray("urlAddresses") : null;
+        ReadableArray urlAddresses = contact.getArray("urlAddresses", null);
         int numOfUrls = 0;
         String[] urls = null;
         if (urlAddresses != null) {
@@ -338,7 +354,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray emailAddresses = contact.hasKey("emailAddresses") ? contact.getArray("emailAddresses") : null;
+        ReadableArray emailAddresses = contact.getArray("emailAddresses", null);
         int numOfEmails = 0;
         String[] emails = null;
         Integer[] emailsLabels = null;
@@ -353,7 +369,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray postalAddresses = contact.hasKey("postalAddresses") ? contact.getArray("postalAddresses") : null;
+        ReadableArray postalAddresses = contact.getArray("postalAddresses", null);
         int numOfPostalAddresses = 0;
         String[] postalAddressesStreet = null;
         String[] postalAddressesCity = null;
@@ -440,15 +456,16 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             contactData.add(structuredPostal);
         }
 
-        if(thumbnailPath != null && !thumbnailPath.isEmpty()) {
+        //check for possible https in a future update
+        if (thumbnailPath != null && !thumbnailPath.isEmpty()) {
             Bitmap photo = getThumbnailBitmap(thumbnailPath);
 
-            if(photo != null) {
+            if (photo != null) {
                 ContentValues thumbnail = new ContentValues();
                 thumbnail.put(ContactsContract.Data.RAW_CONTACT_ID, 0);
                 thumbnail.put(ContactsContract.Data.IS_SUPER_PRIMARY, 1);
                 thumbnail.put(ContactsContract.CommonDataKinds.Photo.PHOTO, toByteArray(photo));
-                thumbnail.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE );
+                thumbnail.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE);
                 contactData.add(thumbnail);
             }
         }
@@ -488,19 +505,63 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Adds contact to phone's addressbook
      */
     @ReactMethod
-    public void addContact(ReadableMap contact, Callback callback) {
-        String givenName = contact.hasKey("givenName") ? contact.getString("givenName") : null;
-        String middleName = contact.hasKey("middleName") ? contact.getString("middleName") : null;
-        String familyName = contact.hasKey("familyName") ? contact.getString("familyName") : null;
-        String prefix = contact.hasKey("prefix") ? contact.getString("prefix") : null;
-        String suffix = contact.hasKey("suffix") ? contact.getString("suffix") : null;
-        String company = contact.hasKey("company") ? contact.getString("company") : null;
-        String jobTitle = contact.hasKey("jobTitle") ? contact.getString("jobTitle") : null;
-        String department = contact.hasKey("department") ? contact.getString("department") : null;
-        String note = contact.hasKey("note") ? contact.getString("note") : null;
-        String thumbnailPath = contact.hasKey("thumbnailPath") ? contact.getString("thumbnailPath") : null;
+    public void addContact(ReadableMap _contact, final Callback callback) {
+        final ReadableMapWrapper contact = new ReadableMapWrapper(_contact);
 
-        ReadableArray phoneNumbers = contact.hasKey("phoneNumbers") ? contact.getArray("phoneNumbers") : null;
+        final String givenName = contact.getString("givenName", null);
+        final String middleName = contact.getString("middleName", null);
+        final String familyName = contact.getString("familyName", null);
+        final String prefix = contact.getString("prefix", null);
+        final String suffix = contact.getString("suffix", null);
+        final String company = contact.getString("company", null);
+        final String jobTitle = contact.getString("jobTitle", null);
+        final String department = contact.getString("department", null);
+        final String note = contact.getString("note", null);
+        String thumbnailPath = contact.getString("thumbnailPath", null);
+        Bitmap photo = null;
+        if (null != thumbnailPath && thumbnailPath.startsWith("http")) {
+            loadImage(thumbnailPath, new LoadBitmap() {
+                @Override
+                public void onBitmap(@Nullable Bitmap bitmap) {
+                    addContactAsync(contact, callback, givenName, middleName, familyName, prefix, suffix, company, jobTitle, department,
+                            note, bitmap);
+                }
+            });
+
+            return;
+        } else if (null != thumbnailPath) {
+            photo = BitmapFactory.decodeFile(thumbnailPath);
+        }
+
+        this.addContactAsync(contact, callback, givenName, middleName, familyName, prefix, suffix, company, jobTitle, department,
+                note, photo);
+    }
+
+    private void loadImage(final String path, final LoadBitmap load) {
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                picasso.load(path).into(new Target() {
+                    @Override
+                    public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
+                        load.onBitmap(bitmap);
+                    }
+
+                    @Override
+                    public void onBitmapFailed(Exception e, Drawable errorDrawable) {
+                        load.onBitmap(null);
+                    }
+
+                    @Override
+                    public void onPrepareLoad(Drawable placeHolderDrawable) {
+                    }
+                });
+            }
+        });
+    }
+
+    private void addContactAsync(ReadableMapWrapper contact, Callback callback, String givenName, String middleName, String familyName, String prefix, String suffix, String company, String jobTitle, String department, String note, @Nullable Bitmap thumbnail) {
+        ReadableArray phoneNumbers = contact.getArray("phoneNumbers", null);
         int numOfPhones = 0;
         String[] phones = null;
         Integer[] phonesTypes = null;
@@ -518,7 +579,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray urlAddresses = contact.hasKey("urlAddresses") ? contact.getArray("urlAddresses") : null;
+        ReadableArray urlAddresses = contact.getArray("urlAddresses", null);
         int numOfUrls = 0;
         String[] urls = null;
         if (urlAddresses != null) {
@@ -529,7 +590,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray emailAddresses = contact.hasKey("emailAddresses") ? contact.getArray("emailAddresses") : null;
+        ReadableArray emailAddresses = contact.getArray("emailAddresses", null);
         int numOfEmails = 0;
         String[] emails = null;
         Integer[] emailsTypes = null;
@@ -610,19 +671,16 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             ops.add(op.build());
         }
 
-        if(thumbnailPath != null && !thumbnailPath.isEmpty()) {
-            Bitmap photo = getThumbnailBitmap(thumbnailPath);
 
-            if(photo != null) {
-                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                        .withValue(ContactsContract.Data.MIMETYPE,ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
-                        .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, toByteArray(photo))
-                        .build());
-            }
+        if (thumbnail != null) {
+            ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                    .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, toByteArray(thumbnail))
+                    .build());
         }
 
-        ReadableArray postalAddresses = contact.hasKey("postalAddresses") ? contact.getArray("postalAddresses") : null;
+        ReadableArray postalAddresses = contact.getArray("postalAddresses", null);
         if (postalAddresses != null) {
             for (int i = 0; i < postalAddresses.size(); i++) {
                 ReadableMap address = postalAddresses.getMap(i);
@@ -647,7 +705,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             ContentResolver cr = ctx.getContentResolver();
             ContentProviderResult[] result = cr.applyBatch(ContactsContract.AUTHORITY, ops);
 
-            if(result != null && result.length > 0) {
+            if (result != null && result.length > 0) {
 
                 String rawId = String.valueOf(ContentUris.parseId(result[0].uri));
 
@@ -671,28 +729,55 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Update contact to phone's addressbook
      */
     @ReactMethod
-    public void updateContact(ReadableMap contact, Callback callback) {
+    public void updateContact(ReadableMap _contact, final Callback callback) {
+        final ReadableMapWrapper contact = new ReadableMapWrapper(_contact);
 
-        String recordID = contact.hasKey("recordID") ? contact.getString("recordID") : null;
-        String rawContactId = contact.hasKey("rawContactId") ? contact.getString("rawContactId") : null;
+        final String recordID = contact.getString("recordID", null);
+        final String rawContactId = contact.getString("rawContactId", null);
 
         if (rawContactId == null || recordID == null) {
             callback.invoke("Invalid recordId or rawContactId");
             return;
         }
 
-        String givenName = contact.hasKey("givenName") ? contact.getString("givenName") : null;
-        String middleName = contact.hasKey("middleName") ? contact.getString("middleName") : null;
-        String familyName = contact.hasKey("familyName") ? contact.getString("familyName") : null;
-        String prefix = contact.hasKey("prefix") ? contact.getString("prefix") : null;
-        String suffix = contact.hasKey("suffix") ? contact.getString("suffix") : null;
-        String company = contact.hasKey("company") ? contact.getString("company") : null;
-        String jobTitle = contact.hasKey("jobTitle") ? contact.getString("jobTitle") : null;
-        String department = contact.hasKey("department") ? contact.getString("department") : null;
-        String note = contact.hasKey("note") ? contact.getString("note") : null;
-        String thumbnailPath = contact.hasKey("thumbnailPath") ? contact.getString("thumbnailPath") : null;
+        final String givenName = contact.getString("givenName", null);
+        final String middleName = contact.getString("middleName", null);
+        final String familyName = contact.getString("familyName", null);
+        final String prefix = contact.getString("prefix", null);
+        final String suffix = contact.getString("suffix", null);
+        final String company = contact.getString("company", null);
+        final String jobTitle = contact.getString("jobTitle", null);
+        final String department = contact.getString("department", null);
+        final String note = contact.getString("note", null);
+        final String thumbnailPath = contact.getString("thumbnailPath", null);
 
-        ReadableArray phoneNumbers = contact.hasKey("phoneNumbers") ? contact.getArray("phoneNumbers") : null;
+
+        Bitmap photo = null;
+        if (null != thumbnailPath && thumbnailPath.startsWith("http")) {
+            loadImage(thumbnailPath, new LoadBitmap() {
+                @Override
+                public void onBitmap(@Nullable Bitmap bitmap) {
+                    Log.d(TAG, "onBitmap: " + thumbnailPath + " bitmap := " + bitmap);
+                    updateContactAsync(contact, callback, recordID, rawContactId, givenName, middleName, familyName, prefix, suffix, company, jobTitle, department,
+                            note, bitmap);
+                }
+            });
+
+            return;
+        } else if (null != thumbnailPath) {
+            photo = BitmapFactory.decodeFile(thumbnailPath);
+            Log.d(TAG, "onBitmap: " + thumbnailPath + " photo := " + photo);
+        } else {
+            Log.d(TAG, "onBitmap: " + thumbnailPath + " no photo");
+        }
+
+        updateContactAsync(contact, callback, recordID, rawContactId, givenName, middleName, familyName, prefix, suffix, company, jobTitle, department,
+                note, photo);
+
+    }
+
+    private void updateContactAsync(ReadableMapWrapper contact, Callback callback, String recordID, String rawContactId, String givenName, String middleName, String familyName, String prefix, String suffix, String company, String jobTitle, String department, String note, Bitmap thumbnail) {
+        ReadableArray phoneNumbers = contact.getArray("phoneNumbers", null);
         int numOfPhones = 0;
         String[] phones = null;
         Integer[] phonesTypes = null;
@@ -716,7 +801,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray urlAddresses = contact.hasKey("urlAddresses") ? contact.getArray("urlAddresses") : null;
+        ReadableArray urlAddresses = contact.getArray("urlAddresses", null);
         int numOfUrls = 0;
         String[] urls = null;
         String[] urlIds = null;
@@ -732,7 +817,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray emailAddresses = contact.hasKey("emailAddresses") ? contact.getArray("emailAddresses") : null;
+        ReadableArray emailAddresses = contact.getArray("emailAddresses", null);
         int numOfEmails = 0;
         String[] emails = null;
         Integer[] emailsTypes = null;
@@ -755,7 +840,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        ReadableArray postalAddresses = contact.hasKey("postalAddresses") ? contact.getArray("postalAddresses") : null;
+        ReadableArray postalAddresses = contact.getArray("postalAddresses", null);
         int numOfPostalAddresses = 0;
         String[] postalAddressesStreet = null;
         String[] postalAddressesCity = null;
@@ -778,9 +863,9 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             for (int i = 0; i < numOfPostalAddresses; i++) {
                 String postalLabel = getValueFromKey(postalAddresses.getMap(i), "label");
                 postalAddressesStreet[i] = getValueFromKey(postalAddresses.getMap(i), "street");
-                postalAddressesCity[i] =  getValueFromKey(postalAddresses.getMap(i), "city");
+                postalAddressesCity[i] = getValueFromKey(postalAddresses.getMap(i), "city");
                 postalAddressesState[i] = getValueFromKey(postalAddresses.getMap(i), "state");
-                postalAddressesRegion[i] = getValueFromKey(postalAddresses.getMap(i),"region");
+                postalAddressesRegion[i] = getValueFromKey(postalAddresses.getMap(i), "region");
                 postalAddressesPostCode[i] = getValueFromKey(postalAddresses.getMap(i), "postCode");
                 postalAddressesCountry[i] = getValueFromKey(postalAddresses.getMap(i), "country");
                 postalAddressesType[i] = mapStringToPostalAddressType(postalLabel);
@@ -820,8 +905,8 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             // remove existing phoneNumbers first
             op = ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
                     .withSelection(
-                        ContactsContract.Data.MIMETYPE  + "=? AND "+ ContactsContract.Data.RAW_CONTACT_ID + " = ?",
-                        new String[]{String.valueOf(CommonDataKinds.Phone.CONTENT_ITEM_TYPE), String.valueOf(rawContactId)}
+                            ContactsContract.Data.MIMETYPE + "=? AND " + ContactsContract.Data.RAW_CONTACT_ID + " = ?",
+                            new String[]{String.valueOf(CommonDataKinds.Phone.CONTENT_ITEM_TYPE), String.valueOf(rawContactId)}
                     );
             ops.add(op.build());
 
@@ -851,12 +936,12 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             ops.add(op.build());
         }
 
-        if (emailAddresses != null){
+        if (emailAddresses != null) {
             // remove existing emails first
             op = ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
                     .withSelection(
-                        ContactsContract.Data.MIMETYPE  + "=? AND "+ ContactsContract.Data.RAW_CONTACT_ID + " = ?",
-                        new String[]{String.valueOf(CommonDataKinds.Email.CONTENT_ITEM_TYPE), String.valueOf(rawContactId)}
+                            ContactsContract.Data.MIMETYPE + "=? AND " + ContactsContract.Data.RAW_CONTACT_ID + " = ?",
+                            new String[]{String.valueOf(CommonDataKinds.Email.CONTENT_ITEM_TYPE), String.valueOf(rawContactId)}
                     );
             ops.add(op.build());
 
@@ -872,24 +957,22 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         }
 
-        if(thumbnailPath != null && !thumbnailPath.isEmpty()) {
-            Bitmap photo = getThumbnailBitmap(thumbnailPath);
 
-            if(photo != null) {
-                ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                        .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                        .withValue(ContactsContract.Data.MIMETYPE,ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
-                        .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, toByteArray(photo))
-                        .build());
-            }
+        if (thumbnail != null) {
+            ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                    .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                    .withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                    .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, toByteArray(thumbnail))
+                    .build());
+            writeDisplayPhoto(Long.parseLong(rawContactId), thumbnail);
         }
 
-        if (postalAddresses != null){
+        if (postalAddresses != null) {
             //remove existing addresses
-             op = ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
+            op = ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
                     .withSelection(
-                        ContactsContract.Data.MIMETYPE  + "=? AND "+ ContactsContract.Data.RAW_CONTACT_ID + " = ?",
-                        new String[]{String.valueOf(CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE), String.valueOf(rawContactId)}
+                            ContactsContract.Data.MIMETYPE + "=? AND " + ContactsContract.Data.RAW_CONTACT_ID + " = ?",
+                            new String[]{String.valueOf(CommonDataKinds.StructuredPostal.CONTENT_ITEM_TYPE), String.valueOf(rawContactId)}
                     );
             ops.add(op.build());
 
@@ -913,7 +996,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             ContentResolver cr = ctx.getContentResolver();
             ContentProviderResult[] result = cr.applyBatch(ContactsContract.AUTHORITY, ops);
 
-            if(result != null && result.length > 0) {
+            if (result != null && result.length > 0) {
 
                 ContactsProvider contactsProvider = new ContactsProvider(cr);
                 WritableMap updatedContact = contactsProvider.getContactById(recordID);
@@ -922,6 +1005,21 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
             }
         } catch (Exception e) {
             callback.invoke(e.toString());
+        }
+    }
+
+    public void writeDisplayPhoto(long rawContactId, Bitmap photo) {
+        Uri rawContactPhotoUri = Uri.withAppendedPath(
+                ContentUris.withAppendedId(RawContacts.CONTENT_URI, rawContactId),
+                RawContacts.DisplayPhoto.CONTENT_DIRECTORY);
+        try {
+            AssetFileDescriptor fd = context.getContentResolver().openAssetFileDescriptor(rawContactPhotoUri, "rw");
+            OutputStream os = fd.createOutputStream();
+            photo.compress(Bitmap.CompressFormat.PNG, 100, os);
+            os.close();
+            fd.close();
+        } catch (IOException e) {
+            // Handle error cases.
         }
     }
 
@@ -934,21 +1032,22 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
         String recordID = contact.hasKey("recordID") ? contact.getString("recordID") : null;
 
         try {
-               Context ctx = getReactApplicationContext();
+            Context ctx = getReactApplicationContext();
 
-               Uri uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI,recordID);
-               ContentResolver cr = ctx.getContentResolver();
-               int deleted = cr.delete(uri,null,null);
+            Uri uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, recordID);
+            ContentResolver cr = ctx.getContentResolver();
+            int deleted = cr.delete(uri, null, null);
 
-               if(deleted > 0)
-                 callback.invoke(null, recordID); // success
-               else
-                 callback.invoke(null, null); // something was wrong
+            if (deleted > 0)
+                callback.invoke(null, recordID); // success
+            else
+                callback.invoke(null, null); // something was wrong
 
         } catch (Exception e) {
             callback.invoke(e.toString(), null);
         }
     }
+
     /*
      * Check permission
      */
@@ -1119,7 +1218,7 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
      * Required for ActivityEventListener
      */
     @Override
-    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != REQUEST_OPEN_CONTACT_FORM && requestCode != REQUEST_OPEN_EXISTING_CONTACT) {
             return;
         }
@@ -1161,11 +1260,47 @@ public class ContactsManager extends ReactContextBaseJavaModule implements Activ
         updateContactCallback = null;
     }
 
-    /*
-     * Required for ActivityEventListener
-     */
-    @Override
-    public void onNewIntent(Intent intent) {
+    public interface LoadBitmap {
+        void onBitmap(@Nullable Bitmap bitmap);
+    }
+
+    public class ReadableMapWrapper {
+        private ReadableMap map;
+
+        private ReadableMapWrapper() {
+
+        }
+
+        public ReadableMapWrapper(@Nullable ReadableMap map) {
+            this.map = map;
+        }
+
+        @Nullable
+        public String getString(String key, String def) {
+            if (null == map) return def;
+            String value = null;
+            try {
+                if (map.hasKey(key)) value = map.getString(key);
+                else value = def;
+                if (value == null) value = def;
+            } catch (Exception e) {
+                value = def;
+            }
+            return value;
+        }
+
+        public ReadableArray getArray(String key, ReadableArray def) {
+            if (null == map) return def;
+            ReadableArray value = null;
+            try {
+                if (map.hasKey(key)) value = map.getArray(key);
+                else value = def;
+                if (value == null) value = def;
+            } catch (Exception e) {
+                value = def;
+            }
+            return value;
+        }
     }
 
 }
